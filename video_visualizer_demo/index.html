@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Beat Visualizer</title>
+  <script src="assets/gsap.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      margin: 0;
+      overflow: hidden;
+      background: #090b0f;
+    }
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.055) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(255,255,255,0.045) 1px, transparent 1px),
+        radial-gradient(circle at 50% 50%, #1d302e 0%, #0b1113 47%, #07080c 100%);
+      background-size: 80px 80px, 80px 80px, 100% 100%;
+    }
+    .vignette {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at center, transparent 34%, rgba(0,0,0,0.64) 100%);
+      z-index: 8;
+      pointer-events: none;
+    }
+    .scan {
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(0deg, rgba(255,255,255,0.028) 0, rgba(255,255,255,0.028) 1px, transparent 1px, transparent 5px);
+      opacity: 0.45;
+      mix-blend-mode: screen;
+      z-index: 7;
+    }
+    .ring {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 580px;
+      height: 580px;
+      margin-left: -290px;
+      margin-top: -290px;
+      border: 2px solid rgba(236, 255, 227, 0.52);
+      border-radius: 50%;
+      z-index: 2;
+    }
+    .ring.r2 {
+      width: 820px;
+      height: 820px;
+      margin-left: -410px;
+      margin-top: -410px;
+      border-color: rgba(255, 96, 58, 0.42);
+    }
+    .ring.r3 {
+      width: 1080px;
+      height: 1080px;
+      margin-left: -540px;
+      margin-top: -540px;
+      border-color: rgba(111, 206, 181, 0.28);
+    }
+    .center-block {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 260px;
+      height: 260px;
+      margin-left: -130px;
+      margin-top: -130px;
+      border: 3px solid rgba(244, 255, 239, 0.72);
+      background: rgba(255, 255, 255, 0.035);
+      box-shadow: 0 0 60px rgba(107, 238, 185, 0.18);
+      z-index: 4;
+    }
+    .line {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 2px;
+      height: 440px;
+      transform-origin: 50% 0;
+      background: linear-gradient(180deg, rgba(255,255,255,0), rgba(236,255,227,0.86), rgba(255,96,58,0));
+      z-index: 3;
+    }
+    .block {
+      position: absolute;
+      width: 58px;
+      height: 58px;
+      border: 2px solid rgba(236,255,227,0.62);
+      background: rgba(255,255,255,0.03);
+      z-index: 5;
+      transform-origin: center center;
+    }
+    .block.hot {
+      border-color: rgba(255,96,58,0.72);
+      background: rgba(255,96,58,0.08);
+    }
+    .bar {
+      position: absolute;
+      bottom: 0;
+      width: 16px;
+      height: 120px;
+      background: linear-gradient(180deg, #ecffe3, #6fceb5 56%, #ff603a);
+      transform-origin: bottom;
+      opacity: 0.8;
+      z-index: 6;
+    }
+    .side {
+      position: absolute;
+      top: 0;
+      width: 10px;
+      height: 1080px;
+      background: #ff603a;
+      opacity: 0.75;
+      transform-origin: center;
+      z-index: 6;
+    }
+    .side.left { left: 0; }
+    .side.right { right: 0; }
+    audio { display: none; }
+  </style>
+</head>
+<body>
+  <main id="root" data-composition-id="main" data-duration="30" data-width="1920" data-height="1080">
+    <div id="ring-1" class="ring" data-layout-allow-overflow></div>
+    <div id="ring-2" class="ring r2" data-layout-allow-overflow></div>
+    <div id="ring-3" class="ring r3" data-layout-allow-overflow></div>
+    <div id="center-block" class="center-block"></div>
+    <div id="line-field"></div>
+    <div id="block-field"></div>
+    <div id="bar-field"></div>
+    <div id="side-left" class="side left"></div>
+    <div id="side-right" class="side right"></div>
+    <div class="scan"></div>
+    <div class="vignette"></div>
+    <audio id="music-bed" src="assets/uk_drill_142_instrumental_shortintro.mp3" data-start="0" data-duration="30" data-track-index="1"></audio>
+  </main>
+
+  <script>
+    const root = document.querySelector("#root");
+    const lineField = document.querySelector("#line-field");
+    const blockField = document.querySelector("#block-field");
+    const barField = document.querySelector("#bar-field");
+
+    for (let i = 0; i < 48; i += 1) {
+      const line = document.createElement("div");
+      line.id = `line-${i}`;
+      line.className = "line";
+      line.style.rotate = `${i * 7.5}deg`;
+      lineField.appendChild(line);
+    }
+
+    for (let i = 0; i < 30; i += 1) {
+      const block = document.createElement("div");
+      block.id = `block-${i}`;
+      block.className = i % 4 === 0 ? "block hot" : "block";
+      const col = i % 10;
+      const row = Math.floor(i / 10);
+      block.style.left = `${210 + col * 164}px`;
+      block.style.top = `${150 + row * 310}px`;
+      blockField.appendChild(block);
+    }
+
+    for (let i = 0; i < 96; i += 1) {
+      const bar = document.createElement("div");
+      bar.id = `bar-${i}`;
+      bar.className = "bar";
+      bar.style.left = `${92 + i * 18}px`;
+      barField.appendChild(bar);
+    }
+
+    const rings = [...document.querySelectorAll(".ring")];
+    const lines = [...document.querySelectorAll(".line")];
+    const blocks = [...document.querySelectorAll(".block")];
+    const bars = [...document.querySelectorAll(".bar")];
+    const center = document.querySelector("#center-block");
+    const sideLeft = document.querySelector("#side-left");
+    const sideRight = document.querySelector("#side-right");
+    const bpm = 142;
+    const beatHz = bpm / 60;
+
+    function pulse(t, phase, width) {
+      const x = (t * beatHz + phase) % 1;
+      return Math.exp(-Math.pow(x, 2) / width);
+    }
+
+    function renderTime(t) {
+      const kick = pulse(t, 0.02, 0.012);
+      const snare = pulse(t, 0.52, 0.018);
+      const hat = pulse(t * 2, 0.18, 0.018);
+      const bass = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * beatHz * 0.5);
+      const drive = Math.min(1, kick * 0.9 + snare * 0.55 + hat * 0.25);
+
+      root.style.filter = `contrast(${1.03 + drive * 0.15}) brightness(${0.92 + drive * 0.18})`;
+
+      rings.forEach((ring, index) => {
+        const scale = 1 + drive * (0.08 + index * 0.035) + Math.sin(t * 1.2 + index) * 0.012;
+        ring.style.transform = `scale(${scale}) rotate(${t * (10 + index * 7)}deg)`;
+        ring.style.opacity = String(0.24 + drive * 0.52 - index * 0.035);
+      });
+
+      center.style.transform = `scale(${1 + kick * 0.28 + snare * 0.1}) rotate(${45 + t * 32}deg)`;
+      center.style.borderColor = kick > 0.45 ? "rgba(255,96,58,0.88)" : "rgba(236,255,227,0.72)";
+
+      lines.forEach((line, index) => {
+        const local = Math.max(0, Math.sin(t * 7.4 + index * 0.55));
+        line.style.height = `${280 + local * 360 + kick * 90}px`;
+        line.style.opacity = String(0.12 + local * 0.36 + drive * 0.22);
+        line.style.transform = `translateY(${-80 - drive * 90}px) scaleX(${1 + snare * 2.4})`;
+      });
+
+      blocks.forEach((block, index) => {
+        const x = index % 10;
+        const y = Math.floor(index / 10);
+        const lane = Math.sin(t * 2.9 + x * 0.8 + y);
+        const hit = pulse(t, (index % 8) / 8, 0.02);
+        block.style.transform = `translate(${lane * 18}px, ${Math.cos(t * 2.2 + index) * 14}px) scale(${0.72 + hit * 0.58 + drive * 0.16}) rotate(${t * 28 + index * 9}deg)`;
+        block.style.opacity = String(0.18 + hit * 0.6 + drive * 0.16);
+      });
+
+      bars.forEach((bar, index) => {
+        const lane = Math.max(0, Math.sin(t * 11.8 + index * 0.35));
+        const stagger = pulse(t, (index % 16) / 16, 0.02);
+        const scale = 0.14 + lane * 0.7 + stagger * 0.6 + kick * 0.34;
+        bar.style.transform = `scaleY(${scale})`;
+        bar.style.opacity = String(0.26 + Math.min(0.72, scale * 0.52));
+      });
+
+      sideLeft.style.transform = `scaleX(${1 + kick * 6 + snare * 2})`;
+      sideRight.style.transform = `scaleX(${1 + kick * 6 + snare * 2})`;
+      sideLeft.style.opacity = sideRight.style.opacity = String(0.32 + drive * 0.56 + bass * 0.1);
+    }
+
+    renderTime(0);
+    const state = { t: 0 };
+    const tl = gsap.timeline({ paused: true });
+    tl.to(state, {
+      t: 30,
+      duration: 30,
+      ease: "none",
+      onUpdate: () => renderTime(state.t)
+    }, 0);
+    window.__timelines.main = tl;
+  </script>
+</body>
+</html>
